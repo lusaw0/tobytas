@@ -1,0 +1,34 @@
+{
+    "game_name": "Undertale",
+    "category_name": "New Game+ Neutral",
+    "pb_attempts": 38,
+    "total_attempts": 1420,
+    "split_frames": [
+        50,
+        60,
+        70,
+        80,
+        90,
+        100,
+        110,
+        120,
+        130,
+        140,
+        150,
+        160
+    ],
+    "splits": [
+        {"name": "Ruins",         "pb_time": 406490000000, "best_time": 390166079300},
+        {"name": "Snowdin",       "pb_time": 756080000000, "best_time": 335476656100},
+        {"name": "Papyrus",       "pb_time": 954596000000, "best_time": 191578738100},
+        {"name": "Spears 2",      "pb_time": 1303269000000, "best_time": 348673000000},
+        {"name": "Enter Lab",     "pb_time": 1588958000000, "best_time": 284962058600},
+        {"name": "Right Floor 2", "pb_time": 1708788000000, "best_time": 116035542800},
+        {"name": "Left Floor 3",  "pb_time": 1800423000000, "best_time": 91217191100},
+        {"name": "Right Floor 3", "pb_time": 1911720000000, "best_time": 105919000000},
+        {"name": "Long Elevator", "pb_time": 2011314000000, "best_time": 93871747500},
+        {"name": "New Home",      "pb_time": 2250217000000, "best_time": 238903000000},
+        {"name": "Asgore",        "pb_time": 2397754000000, "best_time": 138441748900},
+        {"name": "End",           "pb_time": 3056429000000, "best_time": 657811986800}
+    ]
+}

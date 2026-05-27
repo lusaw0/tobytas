@@ -26,22 +26,12 @@ const (
 	key_x
 	key_c
 	key_return
-	key_shift
-	key_ctrl
+	key_left_shift
+	key_right_shift
 	key_up
 	key_down
 	key_left
 	key_right
-	key_a
-	key_d
-	key_i
-	key_l
-	key_n
-	key_o
-	key_r
-	key_s
-	key_u
-	key_space
 )
 
 var mask = loadPNG("tas-mask.png")
@@ -109,75 +99,92 @@ func main() {
 }
 
 func parse(r io.Reader) []uint32 {
-	s := bufio.NewScanner(r)
-	defer checkF(s.Err)
+    s := bufio.NewScanner(r)
+    defer checkF(s.Err)
+    var bits []uint32
+    for s.Scan() {
+        line := s.Text()
 
-	var bits []uint32
+        segments := strings.Split(line, "|")
 
-	for s.Scan() {
-		line := s.Text()
-		line = strings.Split(line, "|")[1]
-		line = strings.TrimPrefix(line, "K")
-		if line == "" {
-			bits = append(bits, 0)
-			continue
-		}
+        // Determine framerate from T segment
+        fps := 30
+        for _, seg := range segments {
+            if strings.HasPrefix(seg, "T") {
+                fpsPart := strings.Split(seg[1:], ":")[0]
+                switch fpsPart {
+                case "60":
+                    fps = 60
+                case "120":
+                    fps = 120
+                }
+                break
+            }
+        }
 
-		active := strings.Split(line, ":")
+        // Find the K segment
+        var kSegment string
+        for _, seg := range segments {
+            if strings.HasPrefix(seg, "K") {
+                kSegment = seg
+                break
+            }
+        }
 
-		var b uint32
+        if kSegment == "" {
+            continue
+        }
 
-		for _, key := range active {
-			switch key {
-			case "20":
-				b |= key_space
-			case "61":
-				b |= key_a
-			case "63":
-				b |= key_c
-			case "64":
-				b |= key_d
-			case "69":
-				b |= key_i
-			case "6c":
-				b |= key_l
-			case "6e":
-				b |= key_n
-			case "6f":
-				b |= key_o
-			case "72":
-				b |= key_r
-			case "73":
-				b |= key_s
-			case "75":
-				b |= key_u
-			case "78":
-				b |= key_x
-			case "7a":
-				b |= key_z
-			case "ff0d":
-				b |= key_return
-			case "ff51":
-				b |= key_left
-			case "ff52":
-				b |= key_up
-			case "ff53":
-				b |= key_right
-			case "ff54":
-				b |= key_down
-			case "ffe1":
-				b |= key_shift
-			case "ffe3":
-				b |= key_ctrl
-			default:
-				panic(key)
-			}
-		}
+        kSegment = strings.TrimPrefix(kSegment, "K")
+        var b uint32
+        if kSegment != "" {
+            active := strings.Split(kSegment, ":")
+            for _, key := range active {
+                switch key {
+					case "7a":
+						b |= key_z
+					case "78":
+						b |= key_x
+					case "63":
+						b |= key_c
+					case "ff0d":
+						b |= key_return
+					case "ffe1":
+						b |= key_left_shift
+					case "ffe2":
+						b |= key_right_shift
+					case "ff52":
+						b |= key_up
+					case "ff54":
+						b |= key_down
+					case "ff51":
+						b |= key_left
+					case "ff53":
+						b |= key_right
+					default:
+						// silently ignore unrecognised keys instead of panicking
+						// since we no longer care about keys outside our set
+				}
+            }
+        }
 
-		bits = append(bits, b)
-	}
-
-	return bits
+        // Expand to 60fps output:
+        // 30fps frames are duplicated (each occupies 2 output frames)
+        // 60fps frames map 1:1
+        // 120fps frames are halved (every other one is dropped)
+        switch fps {
+        case 30:
+            bits = append(bits, b, b)
+        case 60:
+            bits = append(bits, b)
+        case 120:
+            // Only keep every other 120fps frame
+            if len(bits) % 2 == 0 {
+                bits = append(bits, b)
+            }
+        }
+    }
+    return bits
 }
 
 // Remainder of this file is based on https://web.archive.org/web/20120619043838/http://code.google.com/p/brandon-evans-tas/source/browse/Lua/ddrinput.lua
@@ -231,7 +238,56 @@ var buttons = [...]string{
 ....xOOOOOOx....
 .....xxxxxx.....
 ................`,
-	`......xxx.......
+	`................
+................
+......O....OOOO.
+.....OO....OxxO.
+....OxO....OxxO.
+...OxxO....OxxO.
+..OxxxO....OxxO.
+.OxxxxOOOOOOxxO.
+.OxxxxxxxxxxxxO.
+.OxxxxxxxxxxxxO.
+.OxxxxOOOOOOOOO.
+..OxxxO.........
+...OxxO.........
+....OxO.........
+.....OO.........
+......O.........`,
+	`................
+................
+.......OO.......
+......OOOO......
+.....OOxxOO.....
+....OOxxxxOO....
+...OOxxxxxxOO...
+...OxxxxxxxxO...
+...OOOxxxxOOO...
+.....OxxxxO.....
+.....OxxxxO.....
+.....OxxxxO.....
+.....OxxxxO.....
+.....OOOOOO.....
+................
+................`,
+	`................
+................
+.......OO.......
+......OOOO......
+.....OOxxOO.....
+....OOxxxxOO....
+...OOxxxxxxOO...
+...OxxxxxxxxO...
+...OOOxxxxOOO...
+.....OxxxxO.....
+.....OxxxxO.....
+.....OxxxxO.....
+.....OxxxxO.....
+.....OOOOOO.....
+................
+................`,
+	`................
+......xxx.......
 .....xxOxx......
 ....xxOxOxx.....
 ...xxOxxxOxx....
@@ -244,12 +300,11 @@ xxxxOx...xOxxxx.
 ...xOx...xOx....
 ...xOx...xOx....
 ...xOx...xOx....
-...xOxxxxxOx....
 ...xOOOOOOOx....
 ...xxxxxxxxx....`,
-	`...xxxxxxxxx....
+`................
+....xxxxxxx.....
 ...xOOOOOOOx....
-...xOxxxxxOx....
 ...xOx...xOx....
 ...xOx...xOx....
 ...xOx...xOx....
@@ -295,169 +350,9 @@ xxxxxxxxOxOxx...
 .......xOOxx....
 .......xOxx.....
 .......xxx......`,
-	`................
-.....xxxxxx.....
-....xOOOOOOx....
-...xOOxxxxOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOxxxxOOx...
-...xOOOOOOOOx...
-...xOOOxxOOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xxxx..xxxx...`,
-	`................
-...xxxxxxxx.....
-...xOOOOOOOx....
-...xOOxxxxOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOOxxOOxx...
-...xOOOOOOOx....
-...xxxxxxxx.....`,
-	`................
-....xxxxxxx.....
-....xOOOOOx.....
-....xxOOOxx.....
-.....xOOOx......
-.....xOOOx......
-.....xOOOx......
-.....xOOOx......
-.....xOOOx......
-.....xOOOx......
-.....xOOOx......
-.....xOOOx......
-.....xOOOx......
-....xxOOOxx.....
-....xOOOOOx.....
-....xxxxxxx.....`,
-	`................
-...xxxx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOx.........
-...xOOOxxxxxx...
-...xOOOOOOOOx...
-...xxxxxxxxxx...`,
-	`................
-...xxxx..xxxx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOOx.xOOx...
-...xOOOO.xOOx...
-...xOOOOOOOOx...
-...xOOOxOOOOx...
-...xOOx.OOOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xxxx..xxxx...`,
-	`................
-.....xxxxxx.....
-....xOOOOOOx....
-...xOOxxxxOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOxxxxOOx...
-...xxOOxxOOxx...
-....xOOOOOOx....
-.....xxxxxx.....`,
-	`................
-...xxxxxxxx.....
-...xOOOOOOOx....
-...xOOxxxxOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOOxxOOxx...
-...xOOOOOOOx....
-...xOOxxxxOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xxxx..xxxx...`,
-	`................
-.....xxxxxx.....
-....xOOOOOOx....
-...xOOxxxxOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-....xOOOx.xx....
-.....xOOxx......
-......xOOxx.....
-.......xOOOx....
-...xxxx.xOOxx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xxOOxxOOxx...
-....xOOOOOOx....
-.....xxxxxx.....`,
-	`................
-...xxxx..xxxx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xOOx..xOOx...
-...xxOOxxOOxx...
-....xOOOOOOx....
-.....xxxxxx.....`,
-	`................
-................
-................
-................
-................
-................
-................
-................
-................
-...xxx....xxx...
-..xOOOxxxxOOOx..
-..xOxOOOOOOxOx..
-..xOxxxxxxxxOx..
-..xOOOOOOOOOOx..
-...xxxxxxxxxx...
-................`,
 }
 
-var buttonMasks = [17][2]*image.Alpha{
+var buttonMasks = [10][2]*image.Alpha{
 	makeMask(buttons[0]),
 	makeMask(buttons[1]),
 	makeMask(buttons[2]),
@@ -468,71 +363,97 @@ var buttonMasks = [17][2]*image.Alpha{
 	makeMask(buttons[7]),
 	makeMask(buttons[8]),
 	makeMask(buttons[9]),
-	makeMask(buttons[10]),
-	makeMask(buttons[11]),
-	makeMask(buttons[12]),
-	makeMask(buttons[13]),
-	makeMask(buttons[14]),
-	makeMask(buttons[15]),
-	makeMask(buttons[16]),
 }
 
+// func makeMask(str string) [2]*image.Alpha {
+// 	oimg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
+// 	ximg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
+
+// 	i, j := 0, 0
+// 	for y := 0; y < 16; y++ {
+// 		for x := 0; x < 16; x++ {
+// 			var oval, xval uint8
+// 			switch str[i] {
+// 			case 'O':
+// 				oval = 255
+// 			case 'x':
+// 				xval = 255
+// 			}
+// 			// Fill scale×scale block for each source pixel
+// 			for dy := 0; dy < scale; dy++ {
+// 				for dx := 0; dx < scale; dx++ {
+// 					idx := (y*scale+dy)*buttonSize + (x*scale + dx)
+// 					oimg.Pix[idx] = oval
+// 					ximg.Pix[idx] = xval
+// 				}
+// 			}
+// 			i++
+// 			j++
+// 		}
+// 		i++ // skip newline
+// 	}
+
+// 	return [2]*image.Alpha{oimg, ximg}
+// }
+
 func makeMask(str string) [2]*image.Alpha {
-	oimg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
-	ximg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
+    const srcSize = 16
+    oimg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
+    ximg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
 
-	i, j := 0, 0
-	for y := 0; y < buttonSize; y++ {
-		for x := 0; x < buttonSize; x++ {
-			switch str[i] {
-			case 'O':
-				oimg.Pix[j] = 255
-			case 'x':
-				ximg.Pix[j] = 255
-			}
+    offset := (buttonSize/scale - srcSize) / 2 // centre the 16x16 art in the larger area
 
-			i++
-			j++
-		}
-		i++
-	}
+    i := 0
+    for y := 0; y < srcSize; y++ {
+        for x := 0; x < srcSize; x++ {
+            var oval, xval uint8
+            switch str[i] {
+            case 'O':
+                oval = 255
+            case 'x':
+                xval = 255
+            }
+            for dy := 0; dy < scale; dy++ {
+                for dx := 0; dx < scale; dx++ {
+                    idx := ((y+offset)*scale+dy)*buttonSize + ((x+offset)*scale + dx)
+                    if idx >= 0 && idx < len(oimg.Pix) {
+                        oimg.Pix[idx] = oval
+                        ximg.Pix[idx] = xval
+                    }
+                }
+            }
+            i++
+        }
+        i++ // skip newline
+    }
 
-	return [2]*image.Alpha{oimg, ximg}
+    return [2]*image.Alpha{oimg, ximg}
 }
 
 const (
-	preButtonCount   = 3
-	buttonCount      = 7
-	extraButtonCount = len(buttons) - buttonCount
-	width, height    = 640, 120
+	preButtonCount   = 0
+	buttonCount      = 10
+	extraButtonCount = 0
+	width, height    = 960, 960
 
-	// button size in pixels (square)
-	buttonSize = 16
+	scale            = 5
+	buttonSize       = 16 * scale
+	step             = 3 * scale
+	period           = 1200
+	glowHold         = 20
 
-	// pixels per frame moved by inputs.
-	step = 3
+	paddingTop = 16 * scale // padding between top of view and keys
 
-	// time in frames to go through the rainbow; must be divisible by 6
-	period = 600
-
-	// glow time in frames
-	glowHold = 10
-
-	// buttons are pressed when they reach this x position
-	target = (width - buttonSize) / 2
-
-	// top of first button
-	top = (height - buttonCount*buttonSize) / 2
-
-	// number of inputs on the screen (in both directions)
-	display = (target + buttonSize + step) / step
+	target  = 196 - paddingTop
+	left    = (width - buttonCount*buttonSize) / 2 - 4
+	display = (height + buttonSize + step) / step
 )
 
 func render(bits []uint32) {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	minLeft := width - mask.Rect.Max.X
-	maxLeft := target + 12*30*step
-	left := maxLeft
+	minTop := height - mask.Rect.Max.Y
+	maxTop := target - 12*30*step
+	splashTop := maxTop
 	splashStep := 0
 
 	for trueFrame := range bits {
@@ -540,7 +461,6 @@ func render(bits []uint32) {
 
 		for i := -preButtonCount; i < buttonCount+extraButtonCount; i++ {
 			var (
-				// detect holds by going forward, then draw the symbols backward
 				backString [display*2 + 1]bool
 				glowLevel  [display*2 + 1]int
 				any        bool
@@ -553,11 +473,12 @@ func render(bits []uint32) {
 				btn = btn2
 			}
 
-			xoff := 0
-			y := top + buttonSize*btn
+			yoff := -5
+			// x position of this button (horizontal arrangement)
+			x := left + buttonSize*btn
 			if btn >= buttonCount {
-				y = (height - buttonSize) * (btn - buttonCount) / (extraButtonCount - 1)
-				xoff = (btn%2)*buttonSize - buttonSize/2
+				x = (width - buttonSize) * (btn - buttonCount) / (extraButtonCount - 1)
+				yoff = (btn%2)*buttonSize - buttonSize/2
 			}
 
 			for i := -display; i <= display; i++ {
@@ -579,7 +500,6 @@ func render(bits []uint32) {
 						if i == -display {
 							glowLevel[offset] = 1
 						} else {
-
 							glowLevel[offset] = glowHold
 						}
 					} else {
@@ -592,53 +512,59 @@ func render(bits []uint32) {
 				}
 			}
 
-			for i := display; i >= 0; i-- {
-				offset := display + i
+			isCurrentlyPressed := bits[trueFrame]&(1<<btn) != 0
+
+			// Draw future inputs scrolling downward (positive y)
+			// for i := display; i >= 0; i-- {
+			// 	offset := display + i
+			// 	if backString[offset] {
+			// 		fg := retrieveColor(trueFrame + i)
+			// 		if backString[offset-1] {
+			// 			for k := 0; k < step; k++ {
+			// 				overlay(img, buttonMasks[btn], image.Pt(x, target+i*step-k+yoff), fg, color.RGBA{})
+			// 			}
+			// 		} else {
+			// 			overlay(img, buttonMasks[btn], image.Pt(x, target+i*step+yoff), fg, color.RGBA{0, 0, 0, 255})
+			// 		}
+			// 	}
+			// }
+
+			for j := display; j >= 0; j-- {
+				offset := display + j
 				if backString[offset] {
-					fg := retrieveColor(trueFrame + i)
+					// Hide the incoming symbol once it hits the target while pressed
+					if j == 0 && isCurrentlyPressed {
+						continue
+					}
+					fg := retrieveColor(trueFrame + j)
 					if backString[offset-1] {
 						for k := 0; k < step; k++ {
-							overlay(img, buttonMasks[btn], image.Pt(target+i*step-k+xoff, y), fg, color.RGBA{})
+							overlay(img, buttonMasks[btn], image.Pt(x, target+j*step-k+yoff), fg, color.RGBA{})
 						}
 					} else {
-						overlay(img, buttonMasks[btn], image.Pt(target+i*step+xoff, y), fg, color.RGBA{0, 0, 0, 255})
-					}
-				}
-			}
-			for i := -1; i >= -display; i-- {
-				offset := display + i
-				if backString[offset] {
-					fg := retrieveColor(trueFrame + i)
-					fg.R = fg.R/8 + 16
-					fg.G = fg.G/8 + 16
-					fg.B = fg.B/8 + 16
-					if offset > 0 && backString[offset-1] {
-						for k := 0; k < step; k++ {
-							overlay(img, buttonMasks[btn], image.Pt(target+i*step-k+xoff, y), fg, color.RGBA{})
-						}
-					} else {
-						overlay(img, buttonMasks[btn], image.Pt(target+i*step+xoff, y), fg, color.RGBA{0, 0, 0, 255})
+						overlay(img, buttonMasks[btn], image.Pt(x, target+j*step+yoff), fg, color.RGBA{0, 0, 0, 255})
 					}
 				}
 			}
 
+			// Draw the target indicator at the centre y position
 			if any || btn < buttonCount {
 				mh := uint8(255 * glowLevel[display] / glowHold)
-				overlay(img, buttonMasks[btn], image.Pt(target-1+xoff, y), color.RGBA{192, 192, 192, 255}, color.RGBA{mh, mh, mh, 255})
+				overlay(img, buttonMasks[btn], image.Pt(x, target-1+yoff), color.RGBA{192, 192, 192, 255}, color.RGBA{mh, mh, mh, 255})
 			}
 		}
 
 		if splashStep < 2 {
-			draw.Draw(img, image.Rect(0, 0, left, height), splash1, image.ZP, draw.Over)
-			draw.DrawMask(img, image.Rect(left, 0, width, height), splash1, image.Pt(left, 0), invMask, image.ZP, draw.Over)
+			draw.Draw(img, image.Rect(0, 0, width, splashTop), splash1, image.ZP, draw.Over)
+			draw.DrawMask(img, image.Rect(0, splashTop, width, height), splash1, image.Pt(0, splashTop), invMask, image.ZP, draw.Over)
 
 			if splashStep == 0 {
-				draw.DrawMask(img, image.Rect(left, 0, width, height), splash2, image.Pt(left, 0), mask, image.ZP, draw.Over)
+				draw.DrawMask(img, image.Rect(0, splashTop, width, height), splash2, image.Pt(0, splashTop), mask, image.ZP, draw.Over)
 			}
 
-			left -= step
-			if left < minLeft {
-				left = maxLeft
+			splashTop -= step
+			if splashTop < minTop {
+				splashTop = maxTop
 				splashStep++
 				splash1 = splash2
 			}

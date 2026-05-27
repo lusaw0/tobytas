@@ -1,16 +1,55 @@
 #!/bin/bash -e
+source <(grep '^\(\(rerecord\|frame\)_count\|length_\(sec\|nsec\)\)=[0-9]\+$' tas/config.ini)
+ns=$(echo "scale=9; $length_sec + $length_nsec / 1000000000" | bc)
 
-source <(grep '^\(\(rerecord\|frame\)_count\|framerate_\(num\|den\)\)=[0-9]\+$' tas/config.ini)
-
-csec=$(( $frame_count * $framerate_den * 100 / $framerate_num ))
-sec=$(( $csec / 100 ))
-min=$(( $sec / 60 ))
-hrs=$(( $min / 60 ))
-csec=$(( $csec % 100 ))
-sec=$(( $sec % 60 ))
-min=$(( $min % 60 ))
+csec=$(echo "$ns * 100" | bc)
+sec=$(echo "$csec / 100" | bc)
+min=$(echo "$sec / 60" | bc)
+hrs=$(echo "$min / 60" | bc)
+csec=$(echo "$csec % 100" | bc)
+sec=$(echo "$sec % 60" | bc)
+min=$(echo "$min % 60" | bc)
 
 ffmpeg -lavfi $'color=size=2560x480,drawtext=fontfile=DTM-Sans.otf:fontsize=133.3:fontcolor=white:x=w/4-tw/2:y=h/2-lh*2:text=\'This is a\',drawtext=fontfile=DTM-Sans.otf:fontsize=133.3:fontcolor=white:x=w/4-tw/2:y=h/2-lh/2:text=\'Tool-Assisted\',drawtext=fontfile=DTM-Sans.otf:fontsize=133.3:fontcolor=white:x=w/4-tw/2:y=h/2+lh:text=\'Speedrun.\',drawtext=fontfile=DTM-Sans.otf:fontsize=100:fontcolor=white:x=w*3/4-tw/2:y=h/2-lh*2:text=\'For more\',drawtext=fontfile=DTM-Sans.otf:fontsize=100:fontcolor=white:x=w*3/4-tw/2:y=h/2-lh/2:text=\'information, visit\',drawtext=fontfile=DTM-Sans.otf:fontsize=100:fontcolor=white:x=w*3/4-tw/2:y=h/2+lh:text=\'http\\://tasvideos.org\',format=pix_fmts=monob,scale=size=640x120:flags=neighbor' -frames 1 -y tas-splash-1.png
-ffmpeg -lavfi 'color=size=2560x480,drawtext=fontfile=DTM-Sans.otf:fontsize=100:fontcolor=white:x=w/4-tw/2:y=h/2-th:text='"'Total time\\: $(printf "%d\\\\:%02d\\\\:%02d.%02d" "$hrs" "$min" "$sec" "$csec")'"',drawtext=fontfile=DTM-Sans.otf:fontsize=100:fontcolor=white:x=w/4-tw/2:y=h/2+th/2:text='"'Rerecord count\\: $rerecord_count'"',format=pix_fmts=monob,scale=size=640x120:flags=neighbor' -frames 1 -y tas-splash-2.png
 
-ffmpeg -f concat -i undertale-segments.txt -f concat -i deltarune-segments.txt -f rawvideo -pix_fmt rgba -s 640x120 -r 30 -i <(go run readout.go) -f lavfi -i 'smptebars=size=640x480:rate=30,format=yuv444p,drawtext=fontfile=DTM-Mono.otf:text=%{n}:fontcolor=white:fontsize=48:borderw=4:x=w-tw-8:y=h-th-8,drawtext=fontfile=DTM-Mono.otf:text=No Signal:fontcolor=white:fontsize=72:borderw=4:x=w/2-tw/2:y=h/3-th/3' -filter_complex '[3:v] split=2 [ns1][ns2]; [0:v][ns1] overlay=shortest=1:x=1/between(n\,10000000\,10000015)-1:format=yuv444,split=2 [left][utop]; [1:v][ns2] overlay=shortest=1:x=1/between(n\,10000000\,10000015)-1:format=yuv444,split=2 [right][dtop]; [2:v] split=3 [bottom1][ubottom][dbottom]; [bottom1] scale=1280:240:flags=neighbor [bottom]; [left][right] hstack [top]; [top][bottom] vstack [vout1]; [utop][ubottom] vstack [vout2]; [dtop][dbottom] vstack [vout3]; [0:a]asplit=2[u][aout2]; [1:a]asplit=2[d][aout3]; [u][d]amerge=inputs=2,pan=stereo|c0<c0+c1|c1<c2+c3,crossfeed [aout1]' -map '[vout1]' -map '[aout1]' -crf 24 -tune animation -preset veryslow -pix_fmt yuv444p -movflags +faststart -y -r 30 tas.mp4 -map '[vout2]' -map '[aout2]' -crf 24 -tune animation -preset veryslow -pix_fmt yuv444p -movflags +faststart -y -r 30 just_undertale.mp4 -map '[vout3]' -map '[aout3]' -crf 24 -tune animation -preset veryslow -pix_fmt yuv444p -movflags +faststart -y -r 30 just_deltarune.mp4
+ffmpeg -lavfi 'color=size=2560x480,drawtext=fontfile=DTM-Sans.otf:fontsize=100:fontcolor=white:x=w/4-tw/2:y=h/2-th:text='"'Total time\\: $(printf "%d\\\\:%02d\\\\:%02d.%02d" "$(echo "$hrs" | bc)" "$(echo "$min" | bc)" "$(echo "$sec" | bc)" "$(echo "$csec" | bc)")'"',drawtext=fontfile=DTM-Sans.otf:fontsize=100:fontcolor=white:x=w/4-tw/2:y=h/2+th/2:text='"'Rerecord count\\: $rerecord_count'"',format=pix_fmts=monob,scale=size=640x120:flags=neighbor' -frames 1 -y tas-splash-2.png
+
+# ffmpeg \
+#     -i undertale.mp4 \
+#     -f rawvideo -pix_fmt rgba -s 640x720 -r 60 -i <(go run readout.go) \
+#     -filter_complex '
+#        [0:v] scale=1920:1440:flags=neighbor [game];
+#        [1:v] scale=640:720:flags=neighbor [readout_scaled];
+#        [readout_scaled] pad=640:1440:0:720:black [readout];
+#        [game][readout] hstack [vout];
+#        [0:a]aformat=channel_layouts=stereo[aout]
+#     ' \
+#     -map '[vout]' -map '[aout]' -crf 18 -tune animation -preset veryslow -pix_fmt yuv444p -movflags +faststart -y -r 60 tas.mp4
+
+ffmpeg \
+    -i undertale.mp4 \
+    -f rawvideo -pix_fmt rgba -s 960x960 -r 60 -i <(go run readout.go) \
+    -f rawvideo -pix_fmt rgba -s 960x960 -r 60 -i <(go run splits.go) \
+    -filter_complex '
+        [1:v] scale=960:960:flags=neighbor [readout];
+        [2:v] scale=960:960:flags=neighbor [splits];
+        [splits][readout] vstack [right];
+        [0:v][right] hstack [vout];
+        [0:a] aformat=channel_layouts=stereo [aout]
+    ' \
+    -map '[vout]' -map '[aout]' -crf 18 -tune animation -preset veryslow -pix_fmt yuv444p -movflags +faststart -y -r 60 tas.mp4
+
+
+# ffmpeg \
+#     -i undertale.mp4 \
+#     -f rawvideo -pix_fmt rgba -s 640x720 -r 60 -i <(go run readout.go) \
+#     -f rawvideo -pix_fmt rgba -s 480x720 -r 60 -i <(go run splits.go) \
+#     -filter_complex '
+#         [0:v] scale=1440:1080:flags=neighbor [game];
+#         [1:v] scale=480:540:flags=neighbor [readout];
+#         [2:v] scale=480:540:flags=neighbor [splits];
+#         [splits][readout] vstack [right];
+#         [game][right] hstack [vout];
+#         [0:a] aformat=channel_layouts=stereo [aout]
+#     ' \
+#     -map '[vout]' -map '[aout]' -crf 24 -tune animation -preset veryslow -pix_fmt yuv444p -movflags +faststart -y -r 60 tas.mp4
