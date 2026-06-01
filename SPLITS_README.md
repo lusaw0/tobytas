@@ -9,9 +9,9 @@ Below is what the json file would look like if comments were supported:
     "category_name": "New Game+ Neutral", // Category, I have it set to NG+ Neutral but change it at will.
     "pb_attempts": 38, // Finished runs, dogshit variable name
     "total_attempts": 1420, // Total attempts
-    "start_frame": 76, // Frame of the movie file it starts at (76f @ constant 60fps = 1.266s)
+    "start_frame": 76, // Frame of the movie file it starts at, 76f @ constant 60fps = 1.266s
     "split_frames": [
-        19397, // Ruins split, Flowey room door touch [frame the alarm starts counting]
+        19397, // Ruins split, Flowey room door touch, the frame the alarm starts counting
         37820, // Snowdin split, frame before you enter Snowdin Town
         49152, // Papyrus split, frame before you enter room_water1
         69114, // Spears 2 split, frame that the screen cuts to black
@@ -21,7 +21,7 @@ Below is what the json file would look like if comments were supported:
         103075, // RF3 split, frame before you enter RF3 for the first time from the elevator
         108323, // Long Elevator split, frame before you enter the room just after elevator exit.
         115400, // New Home split, frame before you enter barrier room.
-        125184  // End split, post-barrier door touch [frame the alarm starts counting]
+        125184  // End split, post-barrier door touch, the frame the alarm starts counting
     ],
     "splits": [
         //      name = the name of the split.
