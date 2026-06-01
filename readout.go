@@ -99,92 +99,92 @@ func main() {
 }
 
 func parse(r io.Reader) []uint32 {
-    s := bufio.NewScanner(r)
-    defer checkF(s.Err)
-    var bits []uint32
-    for s.Scan() {
-        line := s.Text()
+	s := bufio.NewScanner(r)
+	defer checkF(s.Err)
+	var bits []uint32
+	for s.Scan() {
+		line := s.Text()
 
-        segments := strings.Split(line, "|")
+		segments := strings.Split(line, "|")
 
-        // Determine framerate from T segment
-        fps := 30
-        for _, seg := range segments {
-            if strings.HasPrefix(seg, "T") {
-                fpsPart := strings.Split(seg[1:], ":")[0]
-                switch fpsPart {
-                case "60":
-                    fps = 60
-                case "120":
-                    fps = 120
-                }
-                break
-            }
-        }
-
-        // Find the K segment
-        var kSegment string
-        for _, seg := range segments {
-            if strings.HasPrefix(seg, "K") {
-                kSegment = seg
-                break
-            }
-        }
-
-        if kSegment == "" {
-            continue
-        }
-
-        kSegment = strings.TrimPrefix(kSegment, "K")
-        var b uint32
-        if kSegment != "" {
-            active := strings.Split(kSegment, ":")
-            for _, key := range active {
-                switch key {
-					case "7a":
-						b |= key_z
-					case "78":
-						b |= key_x
-					case "63":
-						b |= key_c
-					case "ff0d":
-						b |= key_return
-					case "ffe1":
-						b |= key_left_shift
-					case "ffe2":
-						b |= key_right_shift
-					case "ff52":
-						b |= key_up
-					case "ff54":
-						b |= key_down
-					case "ff51":
-						b |= key_left
-					case "ff53":
-						b |= key_right
-					default:
-						// silently ignore unrecognised keys instead of panicking
-						// since we no longer care about keys outside our set
+		// Determine framerate from T segment
+		fps := 30
+		for _, seg := range segments {
+			if strings.HasPrefix(seg, "T") {
+				fpsPart := strings.Split(seg[1:], ":")[0]
+				switch fpsPart {
+				case "60":
+					fps = 60
+				case "120":
+					fps = 120
 				}
-            }
-        }
+				break
+			}
+		}
 
-        // Expand to 60fps output:
-        // 30fps frames are duplicated (each occupies 2 output frames)
-        // 60fps frames map 1:1
-        // 120fps frames are halved (every other one is dropped)
-        switch fps {
-        case 30:
-            bits = append(bits, b, b)
-        case 60:
-            bits = append(bits, b)
-        case 120:
-            // Only keep every other 120fps frame
-            if len(bits) % 2 == 0 {
-                bits = append(bits, b)
-            }
-        }
-    }
-    return bits
+		// Find the K segment
+		var kSegment string
+		for _, seg := range segments {
+			if strings.HasPrefix(seg, "K") {
+				kSegment = seg
+				break
+			}
+		}
+
+		if kSegment == "" {
+			continue
+		}
+
+		kSegment = strings.TrimPrefix(kSegment, "K")
+		var b uint32
+		if kSegment != "" {
+			active := strings.Split(kSegment, ":")
+			for _, key := range active {
+				switch key {
+				case "7a":
+					b |= key_z
+				case "78":
+					b |= key_x
+				case "63":
+					b |= key_c
+				case "ff0d":
+					b |= key_return
+				case "ffe1":
+					b |= key_left_shift
+				case "ffe2":
+					b |= key_right_shift
+				case "ff52":
+					b |= key_up
+				case "ff54":
+					b |= key_down
+				case "ff51":
+					b |= key_left
+				case "ff53":
+					b |= key_right
+				default:
+					// silently ignore unrecognised keys instead of panicking
+					// since we no longer care about keys outside our set
+				}
+			}
+		}
+
+		// Expand to 60fps output:
+		// 30fps frames are duplicated (each occupies 2 output frames)
+		// 60fps frames map 1:1
+		// 120fps frames are halved (every other one is dropped)
+		switch fps {
+		case 30:
+			bits = append(bits, b, b)
+		case 60:
+			bits = append(bits, b)
+		case 120:
+			// Only keep every other 120fps frame
+			if len(bits)%2 == 0 {
+				bits = append(bits, b)
+			}
+		}
+	}
+	return bits
 }
 
 // Remainder of this file is based on https://web.archive.org/web/20120619043838/http://code.google.com/p/brandon-evans-tas/source/browse/Lua/ddrinput.lua
@@ -302,7 +302,7 @@ xxxxOx...xOxxxx.
 ...xOx...xOx....
 ...xOOOOOOOx....
 ...xxxxxxxxx....`,
-`................
+	`................
 ....xxxxxxx.....
 ...xOOOOOOOx....
 ...xOx...xOx....
@@ -397,55 +397,55 @@ var buttonMasks = [10][2]*image.Alpha{
 // }
 
 func makeMask(str string) [2]*image.Alpha {
-    const srcSize = 16
-    oimg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
-    ximg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
+	const srcSize = 16
+	oimg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
+	ximg := image.NewAlpha(image.Rect(0, 0, buttonSize, buttonSize))
 
-    offset := (buttonSize/scale - srcSize) / 2 // centre the 16x16 art in the larger area
+	offset := (buttonSize/scale - srcSize) / 2 // centre the 16x16 art in the larger area
 
-    i := 0
-    for y := 0; y < srcSize; y++ {
-        for x := 0; x < srcSize; x++ {
-            var oval, xval uint8
-            switch str[i] {
-            case 'O':
-                oval = 255
-            case 'x':
-                xval = 255
-            }
-            for dy := 0; dy < scale; dy++ {
-                for dx := 0; dx < scale; dx++ {
-                    idx := ((y+offset)*scale+dy)*buttonSize + ((x+offset)*scale + dx)
-                    if idx >= 0 && idx < len(oimg.Pix) {
-                        oimg.Pix[idx] = oval
-                        ximg.Pix[idx] = xval
-                    }
-                }
-            }
-            i++
-        }
-        i++ // skip newline
-    }
+	i := 0
+	for y := 0; y < srcSize; y++ {
+		for x := 0; x < srcSize; x++ {
+			var oval, xval uint8
+			switch str[i] {
+			case 'O':
+				oval = 255
+			case 'x':
+				xval = 255
+			}
+			for dy := 0; dy < scale; dy++ {
+				for dx := 0; dx < scale; dx++ {
+					idx := ((y+offset)*scale+dy)*buttonSize + ((x+offset)*scale + dx)
+					if idx >= 0 && idx < len(oimg.Pix) {
+						oimg.Pix[idx] = oval
+						ximg.Pix[idx] = xval
+					}
+				}
+			}
+			i++
+		}
+		i++ // skip newline
+	}
 
-    return [2]*image.Alpha{oimg, ximg}
+	return [2]*image.Alpha{oimg, ximg}
 }
 
 const (
 	preButtonCount   = 0
 	buttonCount      = 10
 	extraButtonCount = 0
-	width, height    = 960, 960
+	width, height    = 960, 1116
 
-	scale            = 5
-	buttonSize       = 16 * scale
-	step             = 3 * scale
-	period           = 1200
-	glowHold         = 20
+	scale      = 6
+	buttonSize = 16 * scale
+	step       = 3 * scale
+	period     = 1200
+	glowHold   = 20
 
 	paddingTop = 16 * scale // padding between top of view and keys
 
-	target  = 196 - paddingTop
-	left    = (width - buttonCount*buttonSize) / 2 - 4
+	target  = 108 - paddingTop
+	left    = (width-buttonCount*buttonSize)/2 - 4
 	display = (height + buttonSize + step) / step
 )
 

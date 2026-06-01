@@ -23,20 +23,19 @@ import (
 
 const (
 	width            = 960
-	height           = 960
+	height           = 1044
 	fps              = 60
-	fontPath         = "DTM-Mono.otf"
-	fontSize         = 40
+	fontPath         = "DTM-Sans.otf"
+	fontSize         = 46
 	smallSize        = 48
 	segmentTimerSize = 64
 	segmentCsSize    = 48
-	timerSize        = 82
-	timerCsSize      = 58
+	timerSize        = 128
+	timerCsSize      = 96
 	timerPad         = 1 // tight vertical padding around timer glyphs
-	rowHeight        = 46
-	statsGap         = 2
-	iconSize         = 32
-	headerPad        = -5
+	rowHeight        = 52
+	statsGap         = 0
+	headerPad        = -2
 )
 
 var (
@@ -45,13 +44,21 @@ var (
 	colorHighlight  = color.RGBA{50, 130, 255, 255}
 	colorGreen      = color.RGBA{0, 255, 0, 255}
 	colorGold       = color.RGBA{255, 215, 0, 255}
+	colorPB         = color.RGBA{30, 144, 255, 255}
 	colorRed        = color.RGBA{255, 50, 50, 255}
 	colorTimerGreen = color.RGBA{0, 220, 0, 255}
 	colorTimerRed   = color.RGBA{220, 0, 0, 255}
 	colorSeparator  = color.RGBA{0, 0, 0, 255}
 )
 
+var diff time.Duration
+
 // ── Data types ────────────────────────────────────────────────────────────────
+
+type Delta struct {
+	Diff  string
+	Color color.RGBA
+}
 
 type Split struct {
 	Name      string        `json:"name"`
@@ -66,8 +73,10 @@ type State struct {
 	CategoryName  string  `json:"category_name"`
 	Splits        []Split `json:"splits"`
 	SplitFrames   []int   `json:"split_frames"` // inputs list index (0-based) for each split
+	StartFrame    int     `json:"start_frame"`
 	PBAttempts    int     `json:"pb_attempts"`
 	TotalAttempts int     `json:"total_attempts"`
+	Deltas        []Delta
 
 	CurrentSplit    int
 	StartTime       time.Time
@@ -86,6 +95,7 @@ func loadState(path string) *State {
 			CategoryName:  "Neutral Any%",
 			PBAttempts:    38,
 			TotalAttempts: 1419,
+			StartFrame:    190,
 			Splits: []Split{
 				{Name: "Ruins", PBTime: 6*time.Minute + 50*time.Second, BestTime: 6*time.Minute + 30*time.Second},
 				{Name: "Snowdin", PBTime: 12*time.Minute + 40*time.Second, BestTime: 12*time.Minute + 10*time.Second},
@@ -96,6 +106,17 @@ func loadState(path string) *State {
 				{Name: "Left Floor 3", PBTime: 30*time.Minute + 3*time.Second, BestTime: 29*time.Minute + 30*time.Second},
 				{Name: "Right Floor 3", PBTime: 31*time.Minute + 50*time.Second, BestTime: 31*time.Minute + 20*time.Second},
 				{Name: "End", PBTime: 50*time.Minute + 59*time.Second, BestTime: 50*time.Minute + 0*time.Second},
+			},
+			Deltas: []Delta{
+				{"", colorText},
+				{"", colorText},
+				{"", colorText},
+				{"", colorText},
+				{"", colorText},
+				{"", colorText},
+				{"", colorText},
+				{"", colorText},
+				{"", colorText},
 			},
 		}
 	}
@@ -156,6 +177,7 @@ func loadFonts() *Fonts {
 // ── Drawing helpers ───────────────────────────────────────────────────────────
 
 func drawText(img *image.RGBA, f font.Face, x, y int, col color.RGBA, text string) {
+	x = x + 4 // small left padding
 	d := font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(col),
@@ -166,6 +188,7 @@ func drawText(img *image.RGBA, f font.Face, x, y int, col color.RGBA, text strin
 }
 
 func drawTextRight(img *image.RGBA, f font.Face, x, y int, col color.RGBA, text string) {
+	x = x - 4 // small right padding
 	d := font.Drawer{
 		Dst:  img,
 		Src:  image.NewUniform(col),
@@ -214,14 +237,15 @@ func layoutBottom(n int, fonts *Fonts) int {
 	}
 	statRow := faceAscent(fonts.face) + 1 + faceDescent(fonts.face) + statsGap
 	y += 3 * statRow
+	y += 2 // small bottom margin to avoid clipping final stat row
 	return y
 }
 
-func drawStatRow(img *image.RGBA, fonts *Fonts, y int, label, value string) int {
-	baseY := y + faceAscent(fonts.face) + 1
+func drawStatRow(img *image.RGBA, col color.RGBA, fonts *Fonts, y int, label, value string) int {
+	baseY := y + faceAscent(fonts.face)
 	drawText(img, fonts.face, 8, baseY, colorText, label)
-	drawTextRight(img, fonts.face, width-8, baseY, colorText, value)
-	return y + faceAscent(fonts.face) + 1 + faceDescent(fonts.face) + statsGap
+	drawTextRight(img, fonts.face, width-8, baseY, col, value)
+	return y + faceAscent(fonts.face) + faceDescent(fonts.face) + statsGap
 }
 
 func textBaselineCentered(rowTop, innerHeight int, f font.Face) int {
@@ -239,15 +263,72 @@ func formatDuration(d time.Duration) string {
 	m := int(d.Minutes()) % 60
 	s := int(d.Seconds()) % 60
 	cs := int(d.Milliseconds()/10) % 100
+
+	time_string := ""
+
 	if h > 0 {
-		return fmt.Sprintf("%d:%02d:%02d.%02d", h, m, s, cs)
-	} else if m > 9 {
-		return fmt.Sprintf("%02d:%02d.%02d", m, s, cs)
-	} else if s > 9 {
-		return fmt.Sprintf("%02d.%02d", s, cs)
-	} else {
-		return fmt.Sprintf("%2d.%02d", s, cs)
+		time_string += fmt.Sprintf("%d:", h)
 	}
+	if m > 9 {
+		time_string += fmt.Sprintf("%02d", m)
+	} else {
+		time_string += fmt.Sprintf("%2d", m)
+	}
+	if s > 9 {
+		time_string += fmt.Sprintf(":%02d", s)
+	} else {
+		time_string += fmt.Sprintf(":%2d", s)
+	}
+	time_string += fmt.Sprintf(".%02d", cs)
+	return time_string
+}
+func formatTimes(d time.Duration) string {
+	if d == 0 {
+		return "-"
+	}
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	cs := int(d.Milliseconds()/10) % 100
+
+	time_string := ""
+
+	if h > 0 {
+		time_string += fmt.Sprintf("%d:", h)
+	}
+	if m > 9 {
+		time_string += fmt.Sprintf("%02d:", m)
+	} else if m > 0 {
+		time_string += fmt.Sprintf("%d:", m)
+	}
+	if s < 10 && m == 0 {
+		time_string += fmt.Sprintf("%2d.%02d", s, cs)
+	} else {
+		time_string += fmt.Sprintf("%02d.%02d", s, cs)
+	}
+	return time_string
+}
+
+func formatTimer(d time.Duration) (string, string) {
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	cs := int(d.Milliseconds()/10) % 100
+	time_string := ""
+	if h > 0 {
+		time_string += fmt.Sprintf("%d:", h)
+	}
+	if m > 9 {
+		time_string += fmt.Sprintf("%02d:", m)
+	} else if m > 0 {
+		time_string += fmt.Sprintf("%d:", m)
+	}
+	if s > 9 || m > 0 {
+		time_string += fmt.Sprintf("%02d", s)
+	} else {
+		time_string += fmt.Sprintf("%2d", s)
+	}
+	return time_string, fmt.Sprintf(".%02d", cs)
 }
 
 func formatDurationCs(d time.Duration) (string, string) {
@@ -297,6 +378,20 @@ func formatDiff(d time.Duration) (string, color.RGBA) {
 	if d == 0 {
 		return "-", colorText
 	}
+	sign := "-"
+	col := colorGreen
+	if d < 0 {
+		sign = "+"
+		col = colorRed
+		d = -d
+	}
+	return sign + formatTimes(d), col
+}
+
+func formatDelta(d time.Duration) (string, color.RGBA) {
+	if d == 0 {
+		return "-", colorText
+	}
 	sign := "+"
 	col := colorRed
 	if d < 0 {
@@ -304,7 +399,7 @@ func formatDiff(d time.Duration) (string, color.RGBA) {
 		col = colorGreen
 		d = -d
 	}
-	return sign + formatDuration(d), col
+	return sign + formatTimes(d), col
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -313,7 +408,7 @@ func render(img *image.RGBA, state *State, fonts *Fonts) {
 	// Background
 	draw.Draw(img, img.Rect, image.Black, image.ZP, draw.Src)
 
-	y := headerPad
+	y := headerPad - 1
 
 	// ── Header ────────────────────────────────────────────────────────────────
 	line1 := y + fontSize + 2
@@ -321,8 +416,8 @@ func render(img *image.RGBA, state *State, fonts *Fonts) {
 	drawText(img, fonts.face, 8, line1, colorText, state.GameName)
 	drawText(img, fonts.face, 8, line2, colorText, state.CategoryName)
 	attempts := fmt.Sprintf("%d/%d", state.PBAttempts, state.TotalAttempts)
-	drawTextRight(img, fonts.face, width-8, line1, colorText, attempts)
 	y = line2 + faceDescent(fonts.face) + headerPad
+	drawTextRight(img, fonts.face, width-8, line2, colorText, attempts)
 
 	drawHLine(img, y, 0, width, colorSeparator)
 	y += 2
@@ -351,23 +446,14 @@ func render(img *image.RGBA, state *State, fonts *Fonts) {
 
 		// Split time / diff
 		if split.Completed {
-			diff := split.SplitTime - split.PBTime
-			segTime := split.SplitTime
-			if i > 0 {
-				segTime -= state.Splits[i-1].SplitTime
-			}
-			diffStr, diffCol := formatDiff(diff)
-
-			// Gold if best segment
-			if segTime <= split.BestTime {
-				diffCol = colorGold
-				diffStr = formatDuration(segTime)
-			}
-
-			drawTextRight(img, fonts.face, width-260, diffY, diffCol, diffStr)
-			drawTextRight(img, fonts.face, width-8, timeY, colorText, formatDuration(split.SplitTime))
+			// segTime := diff
+			// if i > 0 {
+			// 	segTime -= state.Splits[i-1].SplitTime
+			// }
+			drawTextRight(img, fonts.face, width-260, diffY, state.Deltas[i].Color, state.Deltas[i].Diff)
+			drawTextRight(img, fonts.face, width-8, timeY, colorText, formatTimes(split.SplitTime))
 		} else {
-			drawTextRight(img, fonts.face, width-8, timeY, colorText, formatDuration(split.PBTime))
+			drawTextRight(img, fonts.face, width-8, timeY, colorText, formatTimes(split.PBTime))
 		}
 
 		// drawHLine(img, rowY+rowHeight-1, 0, width, colorSeparator)
@@ -379,7 +465,12 @@ func render(img *image.RGBA, state *State, fonts *Fonts) {
 	y++ // gap above main timer (was 2px)
 
 	// ── Main timer ────────────────────────────────────────────────────────────
-	timerCol := colorTimerGreen
+	timerCol := colorText
+	if state.Running {
+		timerCol = colorTimerGreen
+	} else if state.Finished && state.CurrentTime < state.Splits[len(state.Splits)-1].PBTime {
+		timerCol = colorPB
+	}
 	if state.CurrentSplit < len(state.Splits) && state.Running {
 		split := &state.Splits[state.CurrentSplit]
 		if state.CurrentTime > split.PBTime {
@@ -388,7 +479,7 @@ func render(img *image.RGBA, state *State, fonts *Fonts) {
 	}
 
 	timerTop := y
-	main, cs := formatDurationCs(state.CurrentTime)
+	main, cs := formatTimer(state.CurrentTime)
 	drawTimerRight(img, width-8, timerTop+faceAscent(fonts.timer)+timerPad, timerCol, fonts.timer, fonts.timerCs, main, cs)
 
 	y = timerTop + faceAscent(fonts.timer) + faceDescent(fonts.timer)
@@ -402,7 +493,7 @@ func render(img *image.RGBA, state *State, fonts *Fonts) {
 	}
 
 	segTop := timerTop + faceAscent(fonts.timer)
-	segMain, segCs := formatDurationCs(segTime)
+	segMain, segCs := formatTimer(segTime)
 	drawTimerRight(img, width-8, segTop+faceAscent(fonts.segment)+timerPad, segCol, fonts.segment, fonts.segCs, segMain, segCs)
 
 	y = segTop + faceAscent(fonts.segment) + faceDescent(fonts.segment)
@@ -423,10 +514,12 @@ func render(img *image.RGBA, state *State, fonts *Fonts) {
 
 	// Previous segment
 	prevSegStr := "-"
-	if state.PreviousSegment > 0 {
-		prevSegStr = formatDuration(state.PreviousSegment)
+	prevSegCol := colorText
+	if state.PreviousSegment != 0 {
+		prevSegStr, prevSegCol = formatDelta(state.PreviousSegment)
 	}
-	y = drawStatRow(img, fonts, y, "Previous Segment", prevSegStr)
+
+	y = drawStatRow(img, prevSegCol, fonts, y, "Previous Segment", prevSegStr)
 
 	// Possible time save
 	possibleSave := time.Duration(0)
@@ -440,10 +533,10 @@ func render(img *image.RGBA, state *State, fonts *Fonts) {
 			possibleSave = seg - split.BestTime
 		}
 	}
-	y = drawStatRow(img, fonts, y, "Possible Time Save", formatDuration(possibleSave))
+	y = drawStatRow(img, colorText, fonts, y, "Possible Time Save", formatTimes(possibleSave))
 
 	// Best possible time
-	drawStatRow(img, fonts, y, "Best Possible Time", formatDuration(bpt))
+	drawStatRow(img, colorText, fonts, y, "Best Possible Time", formatTimes(bpt))
 }
 
 func check(err error) {
@@ -564,9 +657,13 @@ func expand(lines []frameLine) []uint32 {
 	return bits
 }
 
-func frameTimestamps(bits []uint32, rawLines []frameLine) []time.Duration {
-	timestamps := make([]time.Duration, 0, len(bits))
+func frameTimestamps(rawLines []frameLine) []time.Duration {
+	// video output is 60fps: 30fps raw frames map to 2 output frames,
+	// 60fps raw frames map to 1 output frame, and 120fps raw frames
+	// map to 1 output frame for every two raw 120fps lines.
+	timestamps := make([]time.Duration, 0)
 	elapsed := time.Duration(0)
+	keep120 := false
 
 	for _, line := range rawLines {
 		switch line.fps {
@@ -580,9 +677,10 @@ func frameTimestamps(bits []uint32, rawLines []frameLine) []time.Duration {
 			elapsed += frameDur
 		case 120:
 			frameDur := time.Second / 120
-			if len(timestamps)%2 == 0 {
+			if !keep120 {
 				timestamps = append(timestamps, elapsed)
 			}
+			keep120 = !keep120
 			elapsed += frameDur
 		}
 	}
@@ -594,18 +692,48 @@ func frameTimestamps(bits []uint32, rawLines []frameLine) []time.Duration {
 
 func handleInput(state *State, line string) {
 	switch line {
-	case "split":
+	case "start":
 		if !state.Running {
 			state.Running = true
 			state.StartTime = time.Now()
 			state.CurrentSplit = 0
-		} else if state.CurrentSplit < len(state.Splits) {
-			state.Splits[state.CurrentSplit].Completed = true
-			state.Splits[state.CurrentSplit].SplitTime = state.CurrentTime
-			if state.CurrentSplit > 0 {
-				seg := state.Splits[state.CurrentSplit].SplitTime - state.Splits[state.CurrentSplit-1].SplitTime
-				state.PreviousSegment = seg
+			state.Deltas = make([]Delta, len(state.Splits))
+		}
+	case "split":
+		if state.CurrentSplit < len(state.Splits) {
+			idx := state.CurrentSplit
+			print("IMPORTANT!!!!! idx: ", idx)
+			state.Splits[idx].Completed = true
+			state.Splits[idx].SplitTime = state.CurrentTime
+			var diff, col = formatDiff(state.Splits[idx].PBTime - state.Splits[idx].SplitTime)
+			print("IMPORTANT!!!!! len: ", len(state.Deltas))
+			state.Deltas[idx] = Delta{
+				Diff:  diff,
+				Color: col,
 			}
+			print("IMPORTANT!!!!! idx: ", idx)
+			for i := 0; i < len(state.Splits); i++ {
+				println("Split ", i)
+				println("    Name:", state.Splits[i].Name)
+				println("  PBTime:", state.Splits[i].PBTime.String())
+				println("  SplitTime:", state.Splits[i].SplitTime.String())
+				println("  Completed:", state.Splits[i].Completed)
+				println("CurrentTime:", state.CurrentTime.String())
+				println("\n")
+			}
+
+			println("Length of Splits:", len(state.Splits))
+			println("CurrentTime:", state.CurrentTime.String())
+			println("\nPBTime:", state.Splits[idx].PBTime.String())
+			println("SplitTime:", state.Splits[idx].SplitTime.String())
+			println("Split! Diff to PB:", diff)
+			seg := state.Splits[idx].SplitTime
+			pbSeg := state.Splits[idx].PBTime
+			if idx > 0 {
+				seg -= state.Splits[idx-1].SplitTime
+				pbSeg -= state.Splits[idx-1].PBTime
+			}
+			state.PreviousSegment = seg - pbSeg
 			state.CurrentSplit++
 			if state.CurrentSplit >= len(state.Splits) {
 				state.Finished = true
@@ -628,7 +756,14 @@ func handleInput(state *State, line string) {
 			state.Splits[state.CurrentSplit].Completed = false
 			state.Splits[state.CurrentSplit].SplitTime = 0
 			if state.CurrentSplit > 0 {
-				state.PreviousSegment = state.Splits[state.CurrentSplit-1].SplitTime
+				idx := state.CurrentSplit - 1
+				seg := state.Splits[idx].SplitTime
+				pbSeg := state.Splits[idx].PBTime
+				if idx > 0 {
+					seg -= state.Splits[idx-1].SplitTime
+					pbSeg -= state.Splits[idx-1].PBTime
+				}
+				state.PreviousSegment = seg - pbSeg
 			} else {
 				state.PreviousSegment = 0
 			}
@@ -649,11 +784,15 @@ func main() {
 
 	rawLines := parseRaw(inputs)
 	bits := expand(rawLines)
-	timestamps := frameTimestamps(bits, rawLines)
+	timestamps := frameTimestamps(rawLines)
 
 	state := loadState("splits.json")
 	fonts := loadFonts()
-	if bottom := layoutBottom(len(state.Splits), fonts); bottom > height {
+
+	bottom := layoutBottom(len(state.Splits), fonts)
+	println("IMPORTANT!!!!! Layout needs", bottom, "px, height is", height, "px")
+
+	if bottom > height {
 		panic(fmt.Sprintf("layout needs %dpx height but canvas is %dpx", bottom, height))
 	}
 
@@ -665,16 +804,18 @@ func main() {
 	for frame := range bits {
 		<-ticker.C
 
-		if frame < len(timestamps) {
-			state.CurrentTime = timestamps[frame]
+		if state.Running && !state.Finished {
+			if frame < len(timestamps) {
+				dur := time.Duration(frame-state.StartFrame) * time.Second / 60
+				state.CurrentTime = dur
+			}
 		}
 
-		if frame == 0 && !state.Running {
-			state.Running = true
+		if frame == state.StartFrame {
+			handleInput(state, "start")
 		}
 
 		if state.CurrentSplit < len(state.Splits) &&
-			state.CurrentSplit < len(state.SplitFrames) &&
 			state.SplitFrames[state.CurrentSplit] == frame {
 			handleInput(state, "split")
 		}

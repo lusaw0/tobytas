@@ -28,13 +28,14 @@ ffmpeg -lavfi 'color=size=2560x480,drawtext=fontfile=DTM-Sans.otf:fontsize=100:f
 
 ffmpeg \
     -i undertale.mp4 \
-    -f rawvideo -pix_fmt rgba -s 960x960 -r 60 -i <(go run readout.go) \
-    -f rawvideo -pix_fmt rgba -s 960x960 -r 60 -i <(go run splits.go) \
+    -f rawvideo -pix_fmt rgba -s 960x1116 -r 60 -i <(go run readout.go) \
+    -f rawvideo -pix_fmt rgba -s 960x1044 -r 60 -i <(go run splits.go) \
     -filter_complex '
-        [1:v] scale=960:960:flags=neighbor [readout];
-        [2:v] scale=960:960:flags=neighbor [splits];
+        [0:v] scale=2880:2160:flags=neighbor [game];
+        [1:v] scale=960:1116:flags=neighbor [readout];
+        [2:v] scale=960:1044:flags=neighbor [splits];
         [splits][readout] vstack [right];
-        [0:v][right] hstack [vout];
+        [game][right] hstack [vout];
         [0:a] aformat=channel_layouts=stereo [aout]
     ' \
     -map '[vout]' -map '[aout]' -crf 18 -tune animation -preset veryslow -pix_fmt yuv444p -movflags +faststart -y -r 60 tas.mp4

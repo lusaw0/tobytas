@@ -3,19 +3,19 @@
     "category_name": "New Game+ Neutral",
     "pb_attempts": 38,
     "total_attempts": 1420,
+    "start_frame": 76,
     "split_frames": [
-        50,
-        60,
-        70,
-        80,
-        90,
-        100,
-        110,
-        120,
-        130,
-        140,
-        150,
-        160
+        19397,
+        37820,
+        49152,
+        69114,
+        85200,
+        91844,
+        96996,
+        103075,
+        108323,
+        115400,
+        125184
     ],
     "splits": [
         {"name": "Ruins",         "pb_time": 406490000000, "best_time": 390166079300},
@@ -28,7 +28,6 @@
         {"name": "Right Floor 3", "pb_time": 1911720000000, "best_time": 105919000000},
         {"name": "Long Elevator", "pb_time": 2011314000000, "best_time": 93871747500},
         {"name": "New Home",      "pb_time": 2250217000000, "best_time": 238903000000},
-        {"name": "Asgore",        "pb_time": 2397754000000, "best_time": 138441748900},
         {"name": "End",           "pb_time": 3056429000000, "best_time": 657811986800}
     ]
 }
